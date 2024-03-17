@@ -10,7 +10,7 @@ https://huggingface.co/models?filter=fill-mask
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 
 import bootstrap
-from recipebuild_tokenizer import RBTokenizer
+from tokenizer.recipebuild_tokenizer import RBTokenizer
 
 import random
 import math
@@ -50,11 +50,11 @@ from transformers import (CONFIG_MAPPING,
                           is_torch_tpu_available,
                           set_seed)
 
-from recipetrend import RecipeTrend
-from trainer import CustomTrainer
+from recipetrend.recipetrend import RecipeTrend
+from utils.trainer import CustomTrainer
 
 VOCAB_CONFIG = 'ingr_title_tag'
-CONFIG_PATH = "/home/jaesung/jaesung/research/transformers/custom_recipetrend/config.json"
+CONFIG_PATH = "/home/jaesung/research/recipetrend/config.json" 
 
 ingt_config = bootstrap.recipebuildConfig(path=CONFIG_PATH)
 transformers.enable_full_determinism(seed=0)
@@ -465,7 +465,6 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
-  
     if model_args.model_name_or_path:
         model = RecipeTrend.from_pretrained(
             model_args.model_name_or_path,
@@ -712,6 +711,7 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        import IPython; IPython.embed(colors="Linux"); exit(1)
         trainer.save_model()  # Saves the tokenizer too for easy upload
         metrics = train_result.metrics
 

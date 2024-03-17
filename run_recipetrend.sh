@@ -14,8 +14,8 @@ python run_recipetrend.py \
     --model_type bert \
     --tokenizer_name bert-base-uncased \
     --max_seq_length 25 \
-    --train_file /disk1/data/ing_mlm_data/processed/v3_ing_title_tag/train.txt \
-    --validation_file /disk1/data/ing_mlm_data/processed/v3_ing_title_tag/val.txt \
+    --train_file /data/jaesung/data/ing_mlm_data/processed/v3_ing_title_tag/train.txt \
+    --validation_file /data/jaesung/data/ing_mlm_data/processed/v3_ing_title_tag/val.txt \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 128 \
     --per_device_eval_batch_size 128 \
