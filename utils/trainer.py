@@ -1071,7 +1071,7 @@ class CustomTrainer(Trainer):
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
-        # model.train()
+        model.train()
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
@@ -1104,9 +1104,8 @@ class CustomTrainer(Trainer):
             labels = None
 
         outputs = model(**inputs)
-
-        labels = outputs['labels'][0]
-
+        # labels = outputs['labels'][0]
+        
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:

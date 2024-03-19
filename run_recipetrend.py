@@ -54,7 +54,7 @@ from recipetrend.recipetrend import RecipeTrend
 from utils.trainer import CustomTrainer
 
 VOCAB_CONFIG = 'ingr_title_tag'
-CONFIG_PATH = "/home/jaesung/research/recipetrend/config.json" 
+CONFIG_PATH = "/home/jaesung/jaesung/research/recipetrend/config.json" 
 
 ingt_config = bootstrap.recipebuildConfig(path=CONFIG_PATH)
 transformers.enable_full_determinism(seed=0)
@@ -480,7 +480,6 @@ def main():
         model = RecipeTrend(config)
 
     # todo @jaesung : model.shape print / resize_token_embedding -> shape check
-
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     embedding_size = model.get_input_embeddings().weight.shape[0]
@@ -607,7 +606,6 @@ def main():
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
-
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
             raise ValueError("--do_eval requires a validation dataset")
@@ -615,7 +613,6 @@ def main():
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
-
         def preprocess_logits_for_metrics(logits, labels):
             if isinstance(logits, tuple):
                 # Depending on the model and config, logits may contain extra tensors,
@@ -674,7 +671,6 @@ def main():
         mlm_probability=data_args.mlm_probability,
         pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
     )
-
     # Initialize our Trainer
     trainer = CustomTrainer(
         model=model,

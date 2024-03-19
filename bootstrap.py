@@ -10,7 +10,7 @@ class recipebuildConfig:
 
     def __init__(
         self,
-        path = "/home/jaesung/research/recipetrend/config.json"# config file path
+        path = "/home/jaesung/jaesung/research/recipetrend/config.json"# config file path
     ):
         self.path = path
         

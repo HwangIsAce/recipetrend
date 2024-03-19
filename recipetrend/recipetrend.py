@@ -1,28 +1,191 @@
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 
 from typing import Optional, List, Tuple, Union
 
 import random
+import os
 
-from utils.modeling_outputs import CustomBaseModelOutputWithPoolingAndCrossAttentions
+from utils.modeling_outputs import CustomBaseModelOutputWithPoolingAndCrossAttentions, CustomMaskedLMOutput
 
+import transformers
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 
-from transformers import BertModel
+from transformers import BertModel, BertForMaskedLM
+from transformers.activations import ACT2FN
+from transformers.modeling_utils import PreTrainedModel
+from transformers.models.bert.configuration_bert import BertConfig
 
-class RecipeTrend(BertModel):
+from transformers.models.bert.modeling_bert import (BertEmbeddings,
+                                                    BertEncoder,
+                                                    BertPooler)
+
+
+_CONFIG_FOR_DOC = "BertConfig"
+
+logger = transformers.utils.logging.get_logger(__name__)
+
+def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
+    """Load tf checkpoints in a pytorch model."""
+    try:
+        import re
+
+        import numpy as np
+        import tensorflow as tf
+    except ImportError:
+        logger.error(
+            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions."
+        )
+        raise
+    tf_path = os.path.abspath(tf_checkpoint_path)
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
+    # Load weights from TF model
+    init_vars = tf.train.list_variables(tf_path)
+    names = []
+    arrays = []
+    for name, shape in init_vars:
+        logger.info(f"Loading TF weight {name} with shape {shape}")
+        array = tf.train.load_variable(tf_path, name)
+        names.append(name)
+        arrays.append(array)
+
+    for name, array in zip(names, arrays):
+        name = name.split("/")
+        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
+        # which are not required for using pretrained model
+        if any(
+            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+            for n in name
+        ):
+            logger.info(f"Skipping {'/'.join(name)}")
+            continue
+        pointer = model
+        for m_name in name:
+            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
+                scope_names = re.split(r"_(\d+)", m_name)
+            else:
+                scope_names = [m_name]
+            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
+                pointer = getattr(pointer, "weight")
+            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
+                pointer = getattr(pointer, "bias")
+            elif scope_names[0] == "output_weights":
+                pointer = getattr(pointer, "weight")
+            elif scope_names[0] == "squad":
+                pointer = getattr(pointer, "classifier")
+            else:
+                try:
+                    pointer = getattr(pointer, scope_names[0])
+                except AttributeError:
+                    logger.info(f"Skipping {'/'.join(name)}")
+                    continue
+            if len(scope_names) >= 2:
+                num = int(scope_names[1])
+                pointer = pointer[num]
+        if m_name[-11:] == "_embeddings":
+            pointer = getattr(pointer, "weight")
+        elif m_name == "kernel":
+            array = np.transpose(array)
+        try:
+            if pointer.shape != array.shape:
+                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+        except ValueError as e:
+            e.args += (pointer.shape, array.shape)
+            raise
+        logger.info(f"Initialize PyTorch weight {name}")
+        pointer.data = torch.from_numpy(array)
+    return model
+
+class BertPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = BertConfig
+    load_tf_weights = load_tf_weights_in_bert
+    base_model_prefix = "bert"
+    supports_gradient_checkpointing = True
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+class BertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+class BertLMPredictionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.transform = BertPredictionHeadTransform(config)
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
+    
+class BertOnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = BertLMPredictionHead(config)
+
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
+        
+class BertModelWithFourier(BertPreTrainedModel):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
-
         self.config = config
-        self.config.hidden_size = 199492
 
-        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
+        self.embeddings = BertEmbeddings(config)
+        self.encoder = BertEncoder(config)
 
-        self.l_ok = 0
-        self.h_ok = 0
-        self.b_ok = 0
+        self.pooler = BertPooler(config) if add_pooling_layer else None
+
+
+        self.post_init()
+
+
+        self.l_ok = 1
+        self.h_ok = 1
+        self.b_ok = 1
 
         self.max_seq_length = self.config.max_position_embeddings
         self.hidden_size = self.config.hidden_size
@@ -34,6 +197,20 @@ class RecipeTrend(BertModel):
         self.HPA = self.createHPAilter((self.max_seq_length, self.hidden_size), self.high_r)
         self.BSA = [self.createBSAilter((self.max_seq_length, self.hidden_size), i, 2)
                 for i in range(min(self.max_seq_length, self.hidden_size) // 2 + 1)]
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+    
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
         self,
@@ -50,9 +227,8 @@ class RecipeTrend(BertModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    ) -> Union[Tuple[torch.Tensor], CustomBaseModelOutputWithPoolingAndCrossAttentions]:
+        r"""encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -153,22 +329,10 @@ class RecipeTrend(BertModel):
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        ## labels
-        mlm_labels = self.encoder(
-            embedding_output,
-            # attention_mask=extended_attention_mask,
-            head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = mlm_labels[0]
-
         ## augmentation
+
+        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
+        
         output_aug_l1, output_aug_l2, output_aug_h1, output_aug_h2, output_aug_b1, output_aug_b2 = [None for i in range(6)]
 
         if self.l_ok:
@@ -279,25 +443,22 @@ class RecipeTrend(BertModel):
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
-            
 
         return CustomBaseModelOutputWithPoolingAndCrossAttentions(
-            output_aug_l1,
-            output_aug_l2,
-            output_aug_h1,
-            output_aug_h2,
-            output_aug_b1,
-            output_aug_b2,
-            # last_hidden_state=sequence_output,
             logits=sequence_output,
-            labels=mlm_labels,
+            output_aug_l1=output_aug_l1,
+            output_aug_l2=output_aug_l2,
+            output_aug_h1=output_aug_h1,
+            output_aug_h2=output_aug_h2,
+            output_aug_b1=output_aug_b1,
+            output_aug_b2=output_aug_b2,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions
+            cross_attentions=encoder_outputs.cross_attentions,
         )
-
+    
     def my_fft(self, seq):
         f = torch.fft.rfft(seq, dim=1)
         amp = torch.absolute(f)
@@ -367,3 +528,10 @@ class RecipeTrend(BertModel):
         hpFilter[d < bandCenter] = 0
 
         return hpFilter
+
+class RecipeTrend(BertForMaskedLM):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.bert = BertModelWithFourier(config, add_pooling_layer=False)
+
