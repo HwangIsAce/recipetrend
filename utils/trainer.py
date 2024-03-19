@@ -1144,16 +1144,35 @@ class CustomTrainer(Trainer):
         seq_output_aug_b2 = outputs['output_aug_b2']
 
         nce_loss_l, nce_loss_h, nce_loss_b = [0, 0, 0]
-        if self.l_ok:
-            nce_loss_l = self.ncelosss(self.tau, self.args.device, seq_output_aug_l1, seq_output_aug_l2)
 
-        if self.h_ok:
-            nce_loss_h = self.ncelosss(self.tau, self.args.device, seq_output_aug_h1, seq_output_aug_h2)
+        # Calculate the number of all cases 
+        contrastive_loss = 0
+        for self.l_ok in [0, 1]:            
+            nce_loss_l = self.ncelosss(self.tau, self.args.
+            device, seq_output_aug_l1, seq_output_aug_l2)
 
-        if self.b_ok:
-            nce_loss_b = self.ncelosss(self.tau, self.args.device, seq_output_aug_b1, seq_output_aug_b2)
+            contrastive_loss += nce_loss_l * self.lmd
 
-        contrastive_loss = self.lmd * nce_loss_l + self.lmd * nce_loss_h + self.lmd * nce_loss_b
+            for self.h_ok in [0, 1]:
+                nce_loss_h = self.ncelosss(self.tau, self.args.device, seq_output_aug_h1, seq_output_aug_h2)
+
+                contrastive_loss += nce_loss_h * self.lmd
+
+                for self.b_ok in [0, 1]:
+                    nce_loss_b = self.ncelosss(self.tau, self.args.device, seq_output_aug_b1, seq_output_aug_b2)
+
+                    contrastive_loss += nce_loss_b * self.lmd
+
+        # if self.l_ok:   
+        #     nce_loss_l = self.ncelosss(self.tau, self.args.device, seq_output_aug_l1, seq_output_aug_l2)
+
+        # if self.h_ok:
+        #     nce_loss_h = self.ncelosss(self.tau, self.args.device, seq_output_aug_h1, seq_output_aug_h2)
+
+        # if self.b_ok:
+        #     nce_loss_b = self.ncelosss(self.tau, self.args.device, seq_output_aug_b1, seq_output_aug_b2)
+
+        # contrastive_loss = self.lmd * nce_loss_l + self.lmd * nce_loss_h + self.lmd * nce_loss_b
 
         loss = loss + contrastive_loss
 

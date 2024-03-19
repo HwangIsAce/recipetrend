@@ -8,7 +8,7 @@
 # CUDA_VISIBLE_DEVICES=1,2,3 \
 # WANDB_PROJECT=ingt-v3-tagtokenizer \
 # WANDB_MODE=online \
-CUDA_VISIBLE_DEVICES=1 \
+CUDA_VISIBLE_DEVICES=0 \
 python run_recipetrend.py \
     --run_name v3-ing-title-tag-tagtokenizer \
     --model_type bert \

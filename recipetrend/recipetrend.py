@@ -179,13 +179,7 @@ class BertModelWithFourier(BertPreTrainedModel):
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
 
-
         self.post_init()
-
-
-        self.l_ok = 1
-        self.h_ok = 1
-        self.b_ok = 1
 
         self.max_seq_length = self.config.max_position_embeddings
         self.hidden_size = self.config.hidden_size
@@ -335,111 +329,108 @@ class BertModelWithFourier(BertPreTrainedModel):
         
         output_aug_l1, output_aug_l2, output_aug_h1, output_aug_h2, output_aug_b1, output_aug_b2 = [None for i in range(6)]
 
-        if self.l_ok:
+        # l_ok 
+        self.LPA = self.LPA.resize_(embedding_output.shape[1:])
 
-            self.LPA = self.LPA.resize_(embedding_output.shape[1:])
+        input_emb_aug_l1 = self.fft_2(embedding_output, self.LPA)
+        input_emb_aug_l2 = self.fft_2(embedding_output, self.LPA)
+        input_emb_aug_l1 = self.dropout(input_emb_aug_l1)
+        input_emb_aug_l2 = self.dropout(input_emb_aug_l2)   
+        input_emb_aug_l1 = self.encoder(
+            input_emb_aug_l1,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        output_aug_l1 = input_emb_aug_l1[-1]
 
-            input_emb_aug_l1 = self.fft_2(embedding_output, self.LPA)
-            input_emb_aug_l2 = self.fft_2(embedding_output, self.LPA)
-            input_emb_aug_l1 = self.dropout(input_emb_aug_l1)
-            input_emb_aug_l2 = self.dropout(input_emb_aug_l2)   
-            input_emb_aug_l1 = self.encoder(
-                input_emb_aug_l1,
-                attention_mask=extended_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            output_aug_l1 = input_emb_aug_l1[-1]
+        input_emb_aug_l2 = self.encoder(
+            input_emb_aug_l2,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        output_aug_l2 = input_emb_aug_l2[-1]
 
-            input_emb_aug_l2 = self.encoder(
-                input_emb_aug_l2,
-                attention_mask=extended_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            output_aug_l2 = input_emb_aug_l2[-1]
+        # h_ok 
+        self.HPA = self.HPA.resize_(embedding_output.shape[1:])
 
-        if self.h_ok:
+        input_emb_aug_h1 = self.fft_2(embedding_output, self.HPA)
+        input_emb_aug_h2 = self.fft_2(embedding_output, self.HPA)
+        input_emb_aug_h1 = self.dropout(input_emb_aug_h1)
+        input_emb_aug_h2 = self.dropout(input_emb_aug_h2)   
+        input_emb_aug_h1 = self.encoder(
+            input_emb_aug_h1,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        output_aug_h1 = input_emb_aug_h1[-1]
 
-            self.HPA = self.HPA.resize_(embedding_output.shape[1:])
+        input_emb_aug_h2 = self.encoder(
+            input_emb_aug_h2,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        output_aug_h2 = input_emb_aug_h2[-1]
 
-            input_emb_aug_h1 = self.fft_2(embedding_output, self.HPA)
-            input_emb_aug_h2 = self.fft_2(embedding_output, self.HPA)
-            input_emb_aug_h1 = self.dropout(input_emb_aug_h1)
-            input_emb_aug_h2 = self.dropout(input_emb_aug_h2)   
-            input_emb_aug_h1 = self.encoder(
-                input_emb_aug_h1,
-                attention_mask=extended_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            output_aug_h1 = input_emb_aug_h1[-1]
+        # b_ok 
+        input_emb_aug_b1 = self.fft_2(embedding_output, random.choice(self.BSA).resize_(embedding_output.shape[1:]))
+        input_emb_aug_b2 = self.fft_2(embedding_output, random.choice(self.BSA).resize_(embedding_output.shape[1:]))
+        input_emb_aug_b1 = self.dropout(input_emb_aug_b1)
+        input_emb_aug_b2 = self.dropout(input_emb_aug_b2)   
+        input_emb_aug_b1 = self.encoder(
+            input_emb_aug_b1,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        output_aug_b1 = input_emb_aug_b1[-1]
 
-            input_emb_aug_h2 = self.encoder(
-                input_emb_aug_h2,
-                attention_mask=extended_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            output_aug_h2 = input_emb_aug_h2[-1]
-
-        if self.b_ok:
-
-            input_emb_aug_b1 = self.fft_2(embedding_output, random.choice(self.BSA).resize_(embedding_output.shape[1:]))
-            input_emb_aug_b2 = self.fft_2(embedding_output, random.choice(self.BSA).resize_(embedding_output.shape[1:]))
-            input_emb_aug_b1 = self.dropout(input_emb_aug_b1)
-            input_emb_aug_b2 = self.dropout(input_emb_aug_b2)   
-            input_emb_aug_b1 = self.encoder(
-                input_emb_aug_b1,
-                attention_mask=extended_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            output_aug_b1 = input_emb_aug_b1[-1]
-
-            input_emb_aug_b2 = self.encoder(
-                input_emb_aug_b2,
-                attention_mask=extended_attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            output_aug_b2 = input_emb_aug_b2[-1]
+        input_emb_aug_b2 = self.encoder(
+            input_emb_aug_b2,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        output_aug_b2 = input_emb_aug_b2[-1]
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
