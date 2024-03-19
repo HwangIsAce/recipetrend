@@ -1104,8 +1104,6 @@ class CustomTrainer(Trainer):
             labels = None
 
         outputs = model(**inputs)
-        # labels = outputs['labels'][0]
-        
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
@@ -1118,7 +1116,6 @@ class CustomTrainer(Trainer):
             else:
                 model_name = unwrapped_model._get_name()
             if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                import IPython; IPython.embed(colors="Linux"); exit(1)
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
@@ -1130,4 +1127,56 @@ class CustomTrainer(Trainer):
                 )
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        ## contrastive learning loss
+        self.lmd = 0.1
+        self.tau = 1
+        
+        self.l_ok = 1
+        self.h_ok = 1
+        self.b_ok = 1
+            
+        seq_output_aug_l1 = outputs['output_aug_l1']
+        seq_output_aug_l2 = outputs['output_aug_l2']
+        seq_output_aug_h1 = outputs['output_aug_h1']
+        seq_output_aug_h2 = outputs['output_aug_h2']
+        seq_output_aug_b1 = outputs['output_aug_b1']
+        seq_output_aug_b2 = outputs['output_aug_b2']
+
+        nce_loss_l, nce_loss_h, nce_loss_b = [0, 0, 0]
+        if self.l_ok:
+            nce_loss_l = self.ncelosss(self.tau, self.args.device, seq_output_aug_l1, seq_output_aug_l2)
+
+        if self.h_ok:
+            nce_loss_h = self.ncelosss(self.tau, self.args.device, seq_output_aug_h1, seq_output_aug_h2)
+
+        if self.b_ok:
+            nce_loss_b = self.ncelosss(self.tau, self.args.device, seq_output_aug_b1, seq_output_aug_b2)
+
+        contrastive_loss = self.lmd * nce_loss_l + self.lmd * nce_loss_h + self.lmd * nce_loss_b
+
+        loss = loss + contrastive_loss
+
         return (loss, outputs) if return_outputs else loss
+    
+    def ncelosss(self, temperature, device, batch_sample_one, batch_sample_two):
+        self.device = device
+        self.criterion = nn.CrossEntropyLoss().to(self.device)
+        self.temperature = temperature
+        b_size = batch_sample_one.shape[0]
+        batch_sample_one = batch_sample_one.view(b_size, -1)
+        batch_sample_two = batch_sample_two.view(b_size, -1)
+
+        self.cossim = nn.CosineSimilarity(dim=-1).to(self.device)
+        sim11 = torch.matmul(batch_sample_one, batch_sample_one.T) / self.temperature
+        sim22 = torch.matmul(batch_sample_two, batch_sample_two.T) / self.temperature
+        sim12 = torch.matmul(batch_sample_one, batch_sample_two.T) / self.temperature
+        d = sim12.shape[-1]
+        sim11[..., range(d), range(d)] = float('-inf')
+        sim22[..., range(d), range(d)] = float('-inf')
+        raw_scores1 = torch.cat([sim12, sim11], dim=-1)
+        raw_scores2 = torch.cat([sim22, sim12.transpose(-1, -2)], dim=-1)
+        logits = torch.cat([raw_scores1, raw_scores2], dim=-2)
+        labels = torch.arange(2 * d, dtype=torch.long, device=logits.device)
+        nce_loss = self.criterion(logits, labels)
+        return nce_loss

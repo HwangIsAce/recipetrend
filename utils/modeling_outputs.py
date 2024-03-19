@@ -48,5 +48,11 @@ class CustomMaskedLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
+    output_aug_l1: torch.FloatTensor = None
+    output_aug_l2: torch.FloatTensor = None
+    output_aug_h1: torch.FloatTensor = None
+    output_aug_h2: torch.FloatTensor = None
+    output_aug_b1: torch.FloatTensor = None
+    output_aug_b2: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None

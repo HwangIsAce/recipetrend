@@ -478,7 +478,7 @@ def main():
     else:
         logger.info("Training new model from scratch")
         model = RecipeTrend(config)
-
+    
     # todo @jaesung : model.shape print / resize_token_embedding -> shape check
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -489,6 +489,7 @@ def main():
         model.resize_token_embeddings(len(tokenizer))
     # Preprocessing the datasets.
     # First we tokenize all the texts.
+
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
     else:
@@ -707,7 +708,6 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        import IPython; IPython.embed(colors="Linux"); exit(1)
         trainer.save_model()  # Saves the tokenizer too for easy upload
         metrics = train_result.metrics
 

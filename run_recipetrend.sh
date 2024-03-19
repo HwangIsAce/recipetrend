@@ -32,7 +32,8 @@ python run_recipetrend.py \
     --pad_to_max_length true \
     --config_overrides num_attention_heads=3,num_hidden_layers=3 \
     --label_smoothing_factor 1 \
-    
+
+
     # --max_steps=200 \
     # --learning_rate
 
