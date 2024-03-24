@@ -1,0 +1,5 @@
+[default]
+entity = hwangjae196
+project = recipetrend
+base_url = https://api.wandb.ai
+
