@@ -11,7 +11,7 @@ WANDB_PROJECT=recipetrend_test \
 WANDB_MODE=online \
 CUDA_VISIBLE_DEVICES=1 \
 python run_recipetrend.py \
-    --run_name recipetrend \
+    --run_name recipetrend_111_setting \
     --model_type bert \
     --tokenizer_name bert-base-uncased \
     --max_seq_length 25 \

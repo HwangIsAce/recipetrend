@@ -34,7 +34,7 @@ from transformers import (CONFIG_MAPPING,
                           Trainer, TrainingArguments, is_torch_tpu_available,
                           set_seed)
 
-from utils.trainer import CustomTrainer
+# from utils.trainer import CustomTrainer
 
 
 ingt_config = bootstrap.recipebuildConfig(path=CONFIG_PATH)
@@ -458,7 +458,6 @@ def main():
     else:
         logger.info("Training new model from scratch")
         model = AutoModelForMaskedLM.from_config(config)
-
     # todo @jaesung : model.shape print / resize_token_embedding -> shape check
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
@@ -656,7 +655,7 @@ def main():
     )
 
     # Initialize our Trainer
-    trainer = CustomTrainer(
+    trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
@@ -680,7 +679,6 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        import IPython; IPython.embed(colors="Linux"); exit(1)
         trainer.save_model()  # Saves the tokenizer too for easy upload
         metrics = train_result.metrics
 
@@ -737,17 +735,15 @@ def main():
         mask_filler = pipeline("fill-mask", model.cpu(), config, tokenizer)
         return mask_filler(text, top_k=top_k)
    
-    print('eval_dataset len: ', len(eval_dataset))
-    print('raw_dataset validation len: ', len(raw_datasets['validation']))
+    # print('eval_dataset len: ', len(eval_dataset))
+    # print('raw_dataset validation len: ', len(raw_datasets['validation']))
 
-    _target_idx = 0
-    for elem in eval_dataset:
-        print(elem)
-        _current_ids = eval['input_ids']
-        _current_ids[_target_idx] = -100
-
-        
-        break
+    # _target_idx = 0
+    # for elem in eval_dataset:
+    #     print(elem)
+    #     _current_ids = eval['input_ids']
+    #     _current_ids[_target_idx] = -100
+    #     break
 
     # infer_custom('[MASK] mirin ginger soy_sauce honey olive_oil salt[SEP]Pan-Fried Chicken Teriyaki-Yaki', model, config, tokenizer)
     # print(' === ')

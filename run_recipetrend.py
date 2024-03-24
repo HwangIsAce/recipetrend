@@ -478,7 +478,6 @@ def main():
     else:
         logger.info("Training new model from scratch")
         model = RecipeTrend(config)
-    
     # todo @jaesung : model.shape print / resize_token_embedding -> shape check
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -599,7 +598,6 @@ def main():
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc=f"Grouping texts in chunks of {max_seq_length}",
             )
-
     if training_args.do_train:
         if "train" not in tokenized_datasets:
             raise ValueError("--do_train requires a train dataset")
@@ -708,9 +706,12 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
+
         trainer.save_model()  # Saves the tokenizer too for easy upload
         metrics = train_result.metrics
 
+        train_loss_for_wandb = metrics['train_loss'] ## wandb
+        
         max_train_samples = (
             data_args.max_train_samples
             if data_args.max_train_samples is not None
@@ -727,6 +728,9 @@ def main():
         logger.info("*** Evaluate ***")
 
         metrics = trainer.evaluate()
+
+        eval_loss_for_wandb = metrics['eval_loss'] ## wandb
+        accuracy_for_wandb = metrics['eval_acc']
 
         max_eval_samples = (
             data_args.max_eval_samples
@@ -764,34 +768,31 @@ def main():
         mask_filler = pipeline("fill-mask", model.cpu(), config, tokenizer)
         return mask_filler(text, top_k=top_k)
    
-    print('eval_dataset len: ', len(eval_dataset))
-    print('raw_dataset validation len: ', len(raw_datasets['validation']))
+    # print('eval_dataset len: ', len(eval_dataset))
+    # print('raw_dataset validation len: ', len(raw_datasets['validation']))
 
-    _target_idx = 0
-    for elem in eval_dataset:
-        print(elem)
-        _current_ids = eval['input_ids']
-        _current_ids[_target_idx] = -100
-        break
+    # _target_idx = 0
+    # for elem in eval_dataset:
+    #     print(elem)
+    #     _current_ids = eval['input_ids']
+    #     _current_ids[_target_idx] = -100
+    #     break
 
-    # infer_custom('[MASK] mirin ginger soy_sauce honey olive_oil salt[SEP]Pan-Fried Chicken Teriyaki-Yaki', model, config, tokenizer)
-    # print(' === ')
-    # infer_custom('sake [MASK] ginger soy_sauce honey olive_oil salt[SEP]Pan-Fried Chicken Teriyaki-Yaki', model, config, tokenizer)
-    # print(' === ')
-    # infer_custom('sake mirin [MASK] soy_sauce honey olive_oil salt[SEP]Pan-Fried Chicken Teriyaki-Yaki', model, config, tokenizer)
-    # print(' === ')
-    # infer_custom('sake mirin ginger [MASK] honey olive_oil salt[SEP]Pan-Fried Chicken Teriyaki-Yaki', model, config, tokenizer)
+    ## wandb
+    import wandb
+    import random
 
-    # infer_custom('poppy_seeds cake_flour lemons fresh_lemon_juice unsalted_butter vanilla_extract lemon_juice baking_powder eggs sugar salt[SEP]Lemon-Poppy Seed Pound Cake', model, config, tokenizer)
-    # infer_custom('[MASK] cake_flour lemons fresh_lemon_juice unsalted_butter vanilla_extract lemon_juice baking_powder eggs sugar salt[SEP]Lemon-Poppy Seed Pound Cake', model, config, tokenizer)
-    # infer_custom('poppy_seeds cake_flour lemons fresh_lemon_juice unsalted_butter vanilla_extract lemon_juice baking_powder eggs [MASK] salt[SEP]Lemon-Poppy Seed Pound Cake', model, config, tokenizer)
-    # infer_custom('instant_minced_onion sweet_pickle_relish Worcestershire_sauce mayonnaise lemon_juice[SEP]Quick Tartare Sauce (Tartar Sauce)', model, config, tokenizer)
-    # infer_custom('[MASK] sweet_pickle_relish Worcestershire_sauce mayonnaise lemon_juice[SEP]Quick Tartare Sauce (Tartar Sauce)', model, config, tokenizer)
-    # infer_custom('instant_minced_onion [MASK] Worcestershire_sauce mayonnaise lemon_juice[SEP]Quick Tartare Sauce (Tartar Sauce)', model, config, tokenizer)
-    # infer_custom('instant_minced_onion sweet_pickle_relish [MASK] mayonnaise lemon_juice[SEP]Quick Tartare Sauce (Tartar Sauce)', model, config, tokenizer)
+    wandb.init(
+        project = "recipetrend",
 
-    predictions = trainer.predict(tokenized_datasets["validation"][:10])
-    print(predictions.predictions.shape, predictions.label_ids.shape)
+        config = {
+            "dataset" : "ing_mlm_data",
+            "architecture" : "BERT",
+        }
+    )
+
+    wandb.log({"train_loss:": train_loss_for_wandb, "eval_loss": eval_loss_for_wandb, "accuracy": accuracy_for_wandb})
+
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)
